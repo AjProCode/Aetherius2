@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { generateFinancialAdvice, generateEducationalContent } from "./services/gemini";
+import { storage } from "./storage.js";
+import { generateFinancialAdvice, generateEducationalContent } from "./services/gemini.js";
 import {
   insertFamilySchema,
   insertFamilyMemberSchema,
@@ -9,7 +9,7 @@ import {
   insertBudgetSchema,
   insertTransactionSchema,
   insertSmartAlertSchema,
-} from "@shared/schema";
+} from "../shared/schema.js";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Family routes

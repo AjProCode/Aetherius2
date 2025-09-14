@@ -19,7 +19,7 @@ import {
   type InsertInvestment,
   type FinancialService,
   type InsertFinancialService,
-} from "@shared/schema";
+} from "../shared/schema.js";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -362,6 +362,7 @@ export class MemStorage implements IStorage {
     const family: Family = {
       ...insertFamily,
       id,
+      totalBalance: insertFamily.totalBalance ?? null,
       createdAt: new Date(),
     };
     this.families.set(id, family);
@@ -393,6 +394,11 @@ export class MemStorage implements IStorage {
     const member: FamilyMember = {
       ...insertMember,
       id,
+      age: insertMember.age ?? null,
+      balance: insertMember.balance ?? null,
+      avatar: insertMember.avatar ?? null,
+      status: insertMember.status ?? null,
+      isActive: insertMember.isActive ?? null,
     };
     this.familyMembers.set(id, member);
     return member;
@@ -418,6 +424,13 @@ export class MemStorage implements IStorage {
     const goal: FamilyGoal = {
       ...insertGoal,
       id,
+      description: insertGoal.description ?? null,
+      currentAmount: insertGoal.currentAmount ?? null,
+      deadline: insertGoal.deadline ?? null,
+      category: insertGoal.category ?? null,
+      icon: insertGoal.icon ?? null,
+      contributors: insertGoal.contributors ?? null,
+      isActive: insertGoal.isActive ?? null,
       createdAt: new Date(),
     };
     this.familyGoals.set(id, goal);
@@ -444,6 +457,8 @@ export class MemStorage implements IStorage {
     const budget: Budget = {
       ...insertBudget,
       id,
+      totalSpent: insertBudget.totalSpent ?? null,
+      categories: insertBudget.categories ?? null,
     };
     this.budgets.set(id, budget);
     return budget;
@@ -470,6 +485,8 @@ export class MemStorage implements IStorage {
     const transaction: Transaction = {
       ...insertTransaction,
       id,
+      memberId: insertTransaction.memberId ?? null,
+      description: insertTransaction.description ?? null,
       date: new Date(),
     };
     this.transactions.set(id, transaction);
@@ -487,6 +504,8 @@ export class MemStorage implements IStorage {
     const alert: SmartAlert = {
       ...insertAlert,
       id,
+      data: insertAlert.data ?? null,
+      isRead: insertAlert.isRead ?? null,
       createdAt: new Date(),
     };
     this.smartAlerts.set(id, alert);
@@ -515,6 +534,13 @@ export class MemStorage implements IStorage {
     const content: EducationalContent = {
       ...insertContent,
       id,
+      description: insertContent.description ?? null,
+      category: insertContent.category ?? null,
+      ageGroup: insertContent.ageGroup ?? null,
+      duration: insertContent.duration ?? null,
+      difficulty: insertContent.difficulty ?? null,
+      icon: insertContent.icon ?? null,
+      isAIGenerated: insertContent.isAIGenerated ?? null,
     };
     this.educationalContent.set(id, content);
     return content;
@@ -541,6 +567,8 @@ export class MemStorage implements IStorage {
     const progress: LearningProgress = {
       ...insertProgress,
       id,
+      progress: insertProgress.progress ?? null,
+      completed: insertProgress.completed ?? null,
       lastAccessed: new Date(),
     };
     this.learningProgress.set(id, progress);
@@ -556,6 +584,10 @@ export class MemStorage implements IStorage {
     const investment: Investment = {
       ...insertInvestment,
       id,
+      returns: insertInvestment.returns ?? null,
+      risk: insertInvestment.risk ?? null,
+      description: insertInvestment.description ?? null,
+      minInvestment: insertInvestment.minInvestment ?? null,
     };
     this.investments.set(id, investment);
     return investment;
@@ -572,6 +604,10 @@ export class MemStorage implements IStorage {
     const service: FinancialService = {
       ...insertService,
       id,
+      status: insertService.status ?? null,
+      amount: insertService.amount ?? null,
+      monthlyPayment: insertService.monthlyPayment ?? null,
+      details: insertService.details ?? null,
     };
     this.financialServices.set(id, service);
     return service;

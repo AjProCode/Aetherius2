@@ -10,12 +10,29 @@ import FinancialServices from "@/components/financial-services";
 import AIAssistant from "@/components/ai-assistant";
 import MobileNavigation from "@/components/mobile-navigation";
 
+interface FamilyData {
+  family: {
+    id: string;
+    name: string;
+    totalBalance: string;
+  };
+  members: Array<{
+    id: string;
+    name: string;
+    role: string;
+    age?: number;
+    balance: string;
+    avatar: string;
+    status: string;
+  }>;
+}
+
 export default function Dashboard() {
   const isMobile = useIsMobile();
   
   const { data: familyData, isLoading } = useQuery({
     queryKey: ["/api/family", "family-1"],
-  });
+  }) as { data: FamilyData | undefined; isLoading: boolean };
 
   if (isLoading) {
     return (
