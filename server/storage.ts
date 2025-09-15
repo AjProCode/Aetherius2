@@ -19,8 +19,20 @@ import {
   type InsertInvestment,
   type FinancialService,
   type InsertFinancialService,
+  families,
+  familyMembers,
+  familyGoals,
+  budgets,
+  transactions,
+  smartAlerts,
+  educationalContent,
+  learningProgress,
+  investments,
+  financialServices,
 } from "../shared/schema.js";
-import { randomUUID } from "crypto";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { Pool } from "pg";
+import { eq, and, desc } from "drizzle-orm";
 
 export interface IStorage {
   // Family operations
@@ -70,31 +82,44 @@ export interface IStorage {
   createFinancialService(service: InsertFinancialService): Promise<FinancialService>;
 }
 
-export class MemStorage implements IStorage {
-  private families: Map<string, Family> = new Map();
-  private familyMembers: Map<string, FamilyMember> = new Map();
-  private familyGoals: Map<string, FamilyGoal> = new Map();
-  private budgets: Map<string, Budget> = new Map();
-  private transactions: Map<string, Transaction> = new Map();
-  private smartAlerts: Map<string, SmartAlert> = new Map();
-  private educationalContent: Map<string, EducationalContent> = new Map();
-  private learningProgress: Map<string, LearningProgress> = new Map();
-  private investments: Map<string, Investment> = new Map();
-  private financialServices: Map<string, FinancialService> = new Map();
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+
+const db = drizzle(pool);
+
+export class PostgreSQLStorage implements IStorage {
+  private isSeeded = false;
 
   constructor() {
-    this.seedData();
+    this.ensureSeedData();
   }
 
-  private seedData() {
+  private async ensureSeedData() {
+    if (this.isSeeded) return;
+    
+    try {
+      // Check if data already exists
+      const existingFamily = await db.select().from(families).where(eq(families.id, "family-1")).limit(1);
+      if (existingFamily.length > 0) {
+        this.isSeeded = true;
+        return;
+      }
+      
+      await this.seedData();
+      this.isSeeded = true;
+    } catch (error) {
+      console.error("Error seeding data:", error);
+    }
+  }
+
+  private async seedData() {
     // Create demo family
-    const family: Family = {
+    await db.insert(families).values({
       id: "family-1",
       name: "The Johnson Family",
       totalBalance: "245670",
-      createdAt: new Date(),
-    };
-    this.families.set(family.id, family);
+    });
 
     // Create family members
     const members: FamilyMember[] = [
@@ -143,7 +168,7 @@ export class MemStorage implements IStorage {
         isActive: true,
       },
     ];
-    members.forEach(member => this.familyMembers.set(member.id, member));
+    await db.insert(familyMembers).values(members);
 
     // Create family goals
     const goals: FamilyGoal[] = [
@@ -190,7 +215,7 @@ export class MemStorage implements IStorage {
         createdAt: new Date(),
       },
     ];
-    goals.forEach(goal => this.familyGoals.set(goal.id, goal));
+    await db.insert(familyGoals).values(goals);
 
     // Create budget
     const budget: Budget = {
@@ -208,7 +233,7 @@ export class MemStorage implements IStorage {
         healthcare: { budget: 0, spent: 0 },
       },
     };
-    this.budgets.set(budget.id, budget);
+    await db.insert(budgets).values(budget);
 
     // Create alerts
     const alerts: SmartAlert[] = [
@@ -246,7 +271,7 @@ export class MemStorage implements IStorage {
         createdAt: new Date(),
       },
     ];
-    alerts.forEach(alert => this.smartAlerts.set(alert.id, alert));
+    await db.insert(smartAlerts).values(alerts);
 
     // Create educational content
     const content: EducationalContent[] = [
@@ -277,7 +302,7 @@ export class MemStorage implements IStorage {
         isAIGenerated: false,
       },
     ];
-    content.forEach(c => this.educationalContent.set(c.id, c));
+    await db.insert(educationalContent).values(content);
 
     // Create investments
     const investmentOptions: Investment[] = [
@@ -315,7 +340,7 @@ export class MemStorage implements IStorage {
         minInvestment: "100",
       },
     ];
-    investmentOptions.forEach(inv => this.investments.set(inv.id, inv));
+    await db.insert(investments).values(investmentOptions);
 
     // Create financial services
     const services: FinancialService[] = [
@@ -350,268 +375,172 @@ export class MemStorage implements IStorage {
         details: { rating: "Excellent", lastUpdated: "Nov 15" },
       },
     ];
-    services.forEach(service => this.financialServices.set(service.id, service));
+    await db.insert(financialServices).values(services);
   }
 
   async getFamily(id: string): Promise<Family | undefined> {
-    return this.families.get(id);
+    const result = await db.select().from(families).where(eq(families.id, id)).limit(1);
+    return result[0];
   }
 
   async createFamily(insertFamily: InsertFamily): Promise<Family> {
-    const id = randomUUID();
-    const family: Family = {
-      ...insertFamily,
-      id,
-      totalBalance: insertFamily.totalBalance ?? null,
-      createdAt: new Date(),
-    };
-    this.families.set(id, family);
-    return family;
+    const result = await db.insert(families).values(insertFamily).returning();
+    return result[0];
   }
 
   async getFamilyWithMembers(familyId: string): Promise<{
     family: Family;
     members: FamilyMember[];
   } | undefined> {
-    const family = this.families.get(familyId);
-    if (!family) return undefined;
+    const familyResult = await db.select().from(families).where(eq(families.id, familyId)).limit(1);
+    if (familyResult.length === 0) return undefined;
 
-    const members = Array.from(this.familyMembers.values()).filter(
-      member => member.familyId === familyId && member.isActive
+    const membersResult = await db.select().from(familyMembers).where(
+      and(eq(familyMembers.familyId, familyId), eq(familyMembers.isActive, true))
     );
 
-    return { family, members };
+    return { family: familyResult[0], members: membersResult };
   }
 
   async getFamilyMembers(familyId: string): Promise<FamilyMember[]> {
-    return Array.from(this.familyMembers.values()).filter(
-      member => member.familyId === familyId && member.isActive
+    return await db.select().from(familyMembers).where(
+      and(eq(familyMembers.familyId, familyId), eq(familyMembers.isActive, true))
     );
   }
 
   async createFamilyMember(insertMember: InsertFamilyMember): Promise<FamilyMember> {
-    const id = randomUUID();
-    const member: FamilyMember = {
-      ...insertMember,
-      id,
-      age: insertMember.age ?? null,
-      balance: insertMember.balance ?? null,
-      avatar: insertMember.avatar ?? null,
-      status: insertMember.status ?? null,
-      isActive: insertMember.isActive ?? null,
-    };
-    this.familyMembers.set(id, member);
-    return member;
+    const result = await db.insert(familyMembers).values(insertMember).returning();
+    return result[0];
   }
 
   async updateFamilyMember(id: string, updates: Partial<FamilyMember>): Promise<FamilyMember | undefined> {
-    const member = this.familyMembers.get(id);
-    if (!member) return undefined;
-
-    const updatedMember = { ...member, ...updates };
-    this.familyMembers.set(id, updatedMember);
-    return updatedMember;
+    const result = await db.update(familyMembers).set(updates).where(eq(familyMembers.id, id)).returning();
+    return result[0];
   }
 
   async getFamilyGoals(familyId: string): Promise<FamilyGoal[]> {
-    return Array.from(this.familyGoals.values()).filter(
-      goal => goal.familyId === familyId && goal.isActive
+    return await db.select().from(familyGoals).where(
+      and(eq(familyGoals.familyId, familyId), eq(familyGoals.isActive, true))
     );
   }
 
   async createFamilyGoal(insertGoal: InsertFamilyGoal): Promise<FamilyGoal> {
-    const id = randomUUID();
-    const goal: FamilyGoal = {
-      ...insertGoal,
-      id,
-      description: insertGoal.description ?? null,
-      currentAmount: insertGoal.currentAmount ?? null,
-      deadline: insertGoal.deadline ?? null,
-      category: insertGoal.category ?? null,
-      icon: insertGoal.icon ?? null,
-      contributors: insertGoal.contributors ?? null,
-      isActive: insertGoal.isActive ?? null,
-      createdAt: new Date(),
-    };
-    this.familyGoals.set(id, goal);
-    return goal;
+    const result = await db.insert(familyGoals).values(insertGoal).returning();
+    return result[0];
   }
 
   async updateFamilyGoal(id: string, updates: Partial<FamilyGoal>): Promise<FamilyGoal | undefined> {
-    const goal = this.familyGoals.get(id);
-    if (!goal) return undefined;
-
-    const updatedGoal = { ...goal, ...updates };
-    this.familyGoals.set(id, updatedGoal);
-    return updatedGoal;
+    const result = await db.update(familyGoals).set(updates).where(eq(familyGoals.id, id)).returning();
+    return result[0];
   }
 
   async getFamilyBudget(familyId: string, month: string): Promise<Budget | undefined> {
-    return Array.from(this.budgets.values()).find(
-      budget => budget.familyId === familyId && budget.month === month
-    );
+    const result = await db.select().from(budgets).where(
+      and(eq(budgets.familyId, familyId), eq(budgets.month, month))
+    ).limit(1);
+    return result[0];
   }
 
   async createBudget(insertBudget: InsertBudget): Promise<Budget> {
-    const id = randomUUID();
-    const budget: Budget = {
-      ...insertBudget,
-      id,
-      totalSpent: insertBudget.totalSpent ?? null,
-      categories: insertBudget.categories ?? null,
-    };
-    this.budgets.set(id, budget);
-    return budget;
+    const result = await db.insert(budgets).values(insertBudget).returning();
+    return result[0];
   }
 
   async updateBudget(id: string, updates: Partial<Budget>): Promise<Budget | undefined> {
-    const budget = this.budgets.get(id);
-    if (!budget) return undefined;
-
-    const updatedBudget = { ...budget, ...updates };
-    this.budgets.set(id, updatedBudget);
-    return updatedBudget;
+    const result = await db.update(budgets).set(updates).where(eq(budgets.id, id)).returning();
+    return result[0];
   }
 
   async getFamilyTransactions(familyId: string, limit = 50): Promise<Transaction[]> {
-    return Array.from(this.transactions.values())
-      .filter(transaction => transaction.familyId === familyId)
-      .sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
-      .slice(0, limit);
+    return await db.select().from(transactions)
+      .where(eq(transactions.familyId, familyId))
+      .orderBy(desc(transactions.date))
+      .limit(limit);
   }
 
   async createTransaction(insertTransaction: InsertTransaction): Promise<Transaction> {
-    const id = randomUUID();
-    const transaction: Transaction = {
-      ...insertTransaction,
-      id,
-      memberId: insertTransaction.memberId ?? null,
-      description: insertTransaction.description ?? null,
-      date: new Date(),
-    };
-    this.transactions.set(id, transaction);
-    return transaction;
+    const result = await db.insert(transactions).values(insertTransaction).returning();
+    return result[0];
   }
 
   async getFamilyAlerts(familyId: string): Promise<SmartAlert[]> {
-    return Array.from(this.smartAlerts.values())
-      .filter(alert => alert.familyId === familyId)
-      .sort((a, b) => (b.createdAt?.getTime() || 0) - (a.createdAt?.getTime() || 0));
+    return await db.select().from(smartAlerts)
+      .where(eq(smartAlerts.familyId, familyId))
+      .orderBy(desc(smartAlerts.createdAt));
   }
 
   async createAlert(insertAlert: InsertSmartAlert): Promise<SmartAlert> {
-    const id = randomUUID();
-    const alert: SmartAlert = {
-      ...insertAlert,
-      id,
-      data: insertAlert.data ?? null,
-      isRead: insertAlert.isRead ?? null,
-      createdAt: new Date(),
-    };
-    this.smartAlerts.set(id, alert);
-    return alert;
+    const result = await db.insert(smartAlerts).values(insertAlert).returning();
+    return result[0];
   }
 
-  async markAlertAsRead(id: string): Promise<SmartAlert | undefined> {
-    const alert = this.smartAlerts.get(id);
-    if (!alert) return undefined;
-
-    const updatedAlert = { ...alert, isRead: true };
-    this.smartAlerts.set(id, updatedAlert);
-    return updatedAlert;
-  }
 
   async getEducationalContent(type?: string, ageGroup?: string): Promise<EducationalContent[]> {
-    return Array.from(this.educationalContent.values()).filter(content => {
-      if (type && content.type !== type) return false;
-      if (ageGroup && content.ageGroup !== ageGroup && content.ageGroup !== "all") return false;
-      return true;
-    });
+    const conditions = [];
+    if (type) conditions.push(eq(educationalContent.type, type));
+    if (ageGroup) conditions.push(eq(educationalContent.ageGroup, ageGroup));
+    
+    if (conditions.length > 0) {
+      return await db.select().from(educationalContent).where(and(...conditions));
+    }
+    
+    return await db.select().from(educationalContent);
   }
 
   async createEducationalContent(insertContent: InsertEducationalContent): Promise<EducationalContent> {
-    const id = randomUUID();
-    const content: EducationalContent = {
-      ...insertContent,
-      id,
-      description: insertContent.description ?? null,
-      category: insertContent.category ?? null,
-      ageGroup: insertContent.ageGroup ?? null,
-      duration: insertContent.duration ?? null,
-      difficulty: insertContent.difficulty ?? null,
-      icon: insertContent.icon ?? null,
-      isAIGenerated: insertContent.isAIGenerated ?? null,
-    };
-    this.educationalContent.set(id, content);
-    return content;
+    const result = await db.insert(educationalContent).values(insertContent).returning();
+    return result[0];
   }
 
   async getLearningProgress(memberId: string): Promise<LearningProgress[]> {
-    return Array.from(this.learningProgress.values()).filter(
-      progress => progress.memberId === memberId
-    );
+    return await db.select().from(learningProgress).where(eq(learningProgress.memberId, memberId));
   }
 
   async updateLearningProgress(insertProgress: InsertLearningProgress): Promise<LearningProgress> {
-    const existing = Array.from(this.learningProgress.values()).find(
-      p => p.memberId === insertProgress.memberId && p.contentId === insertProgress.contentId
-    );
+    const existing = await db.select().from(learningProgress).where(
+      and(
+        eq(learningProgress.memberId, insertProgress.memberId),
+        eq(learningProgress.contentId, insertProgress.contentId)
+      )
+    ).limit(1);
 
-    if (existing) {
-      const updated = { ...existing, ...insertProgress, lastAccessed: new Date() };
-      this.learningProgress.set(existing.id, updated);
-      return updated;
+    if (existing.length > 0) {
+      const result = await db.update(learningProgress)
+        .set({ ...insertProgress, lastAccessed: new Date() })
+        .where(eq(learningProgress.id, existing[0].id))
+        .returning();
+      return result[0];
     }
 
-    const id = randomUUID();
-    const progress: LearningProgress = {
-      ...insertProgress,
-      id,
-      progress: insertProgress.progress ?? null,
-      completed: insertProgress.completed ?? null,
-      lastAccessed: new Date(),
-    };
-    this.learningProgress.set(id, progress);
-    return progress;
+    const result = await db.insert(learningProgress).values(insertProgress).returning();
+    return result[0];
   }
 
   async getInvestments(): Promise<Investment[]> {
-    return Array.from(this.investments.values());
+    return await db.select().from(investments);
   }
 
   async createInvestment(insertInvestment: InsertInvestment): Promise<Investment> {
-    const id = randomUUID();
-    const investment: Investment = {
-      ...insertInvestment,
-      id,
-      returns: insertInvestment.returns ?? null,
-      risk: insertInvestment.risk ?? null,
-      description: insertInvestment.description ?? null,
-      minInvestment: insertInvestment.minInvestment ?? null,
-    };
-    this.investments.set(id, investment);
-    return investment;
+    const result = await db.insert(investments).values(insertInvestment).returning();
+    return result[0];
   }
 
   async getFamilyFinancialServices(familyId: string): Promise<FinancialService[]> {
-    return Array.from(this.financialServices.values()).filter(
-      service => service.familyId === familyId
-    );
+    return await db.select().from(financialServices).where(eq(financialServices.familyId, familyId));
   }
 
   async createFinancialService(insertService: InsertFinancialService): Promise<FinancialService> {
-    const id = randomUUID();
-    const service: FinancialService = {
-      ...insertService,
-      id,
-      status: insertService.status ?? null,
-      amount: insertService.amount ?? null,
-      monthlyPayment: insertService.monthlyPayment ?? null,
-      details: insertService.details ?? null,
-    };
-    this.financialServices.set(id, service);
-    return service;
+    const result = await db.insert(financialServices).values(insertService).returning();
+    return result[0];
+  }
+
+  async markAlertAsRead(id: string): Promise<SmartAlert | undefined> {
+    const result = await db.update(smartAlerts)
+      .set({ isRead: true })
+      .where(eq(smartAlerts.id, id))
+      .returning();
+    return result[0];
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new PostgreSQLStorage();
