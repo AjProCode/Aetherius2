@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch server/index.ts",
+    "dev": "npx tsx watch server/index.ts",
     "build": "tsc && vite build",
     "preview": "node dist/server/index.js",
     "start": "node dist/server/index.js"
